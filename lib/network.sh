@@ -75,15 +75,28 @@ apply_network_rules() {
         done <<< "${ips}"
     done <<< "${custom_rules}"
 
-    # Host service forwarding — resolve gateway inside VM
+    # Host service forwarding — use OrbStack's host.internal (IPv4 + IPv6)
     local host_services
     host_services=$(parse_host_services "${config_file}")
-    local gateway=""
+    local host_ipv4="" host_ipv6=""
     while IFS= read -r port; do
         [[ -z "${port}" ]] && continue
-        if [[ -z "${gateway}" ]]; then
-            gateway=$(vm_exec "${vm_name}" "${runtime}" bash -c "ip route | grep default | head -1" 2>/dev/null | awk '{print $3}')
+        # Resolve host.internal inside the VM (OrbStack provides this)
+        if [[ -z "${host_ipv4}" ]]; then
+            local host_ips
+            host_ips=$(vm_exec "${vm_name}" "${runtime}" bash -c "getent ahosts host.internal 2>/dev/null || echo ''" 2>/dev/null)
+            host_ipv4=$(echo "${host_ips}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            host_ipv6=$(echo "${host_ips}" | grep -oE 'fd[0-9a-f:]+' | head -1)
         fi
+        if [[ -n "${host_ipv4}" ]]; then
+            rules+=("sudo iptables -A OUTPUT -p tcp -d ${host_ipv4} --dport ${port} -j ACCEPT")
+        fi
+        if [[ -n "${host_ipv6}" ]]; then
+            rules+=("sudo ip6tables -A OUTPUT -p tcp -d ${host_ipv6} --dport ${port} -j ACCEPT 2>/dev/null || true")
+        fi
+        # Also allow via default gateway as fallback
+        local gateway
+        gateway=$(vm_exec "${vm_name}" "${runtime}" bash -c "ip route | grep default | head -1" 2>/dev/null | awk '{print $3}')
         if [[ -n "${gateway}" ]]; then
             rules+=("sudo iptables -A OUTPUT -p tcp -d ${gateway} --dport ${port} -j ACCEPT")
         fi
