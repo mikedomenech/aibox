@@ -211,6 +211,15 @@ sudo apt-get update -qq
 
 echo '>>> Installing base tools...'
 sudo apt-get install -y -qq curl git build-essential ca-certificates iptables
+
+echo '>>> Installing GitHub CLI...'
+sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+ARCH=\$(dpkg --print-architecture)
+echo \"deb [arch=\${ARCH} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt-get update -qq
+sudo apt-get install -y -qq gh
 "
 
     # Add language runtimes from config
