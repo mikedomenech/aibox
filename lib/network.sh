@@ -18,6 +18,16 @@ DEFAULT_ALLOWED_HOSTS=(
     "static.rust-lang.org:443"
 )
 
+# Resolve hostname to IPs on the host side (macOS or Linux)
+_resolve_host() {
+    local host="$1"
+    if command -v host &>/dev/null; then
+        host "${host}" 2>/dev/null | awk '/has address/{print $NF}' | sort -u
+    elif command -v getent &>/dev/null; then
+        getent ahosts "${host}" 2>/dev/null | awk '{print $1}' | sort -u
+    fi
+}
+
 apply_network_rules() {
     local vm_name="$1"
     local runtime="$2"
@@ -26,77 +36,69 @@ apply_network_rules() {
     local allow_defaults
     allow_defaults=$(parse_config "${config_file}" "network.allow_defaults" "true")
 
-    # Build iptables script
-    local iptables_script="#!/bin/bash
-set -euo pipefail
+    # Build a flat list of iptables commands — no subshells, no dynamic resolution inside VM
+    local rules=()
 
-# Flush existing rules
-sudo iptables -F OUTPUT 2>/dev/null || true
+    # Base rules
+    rules+=("sudo iptables -F OUTPUT 2>/dev/null || true")
+    rules+=("sudo iptables -A OUTPUT -o lo -j ACCEPT")
+    rules+=("sudo iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+    rules+=("sudo iptables -A OUTPUT -p udp --dport 53 -j ACCEPT")
+    rules+=("sudo iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT")
 
-# Allow loopback
-sudo iptables -A OUTPUT -o lo -j ACCEPT
-
-# Allow established connections
-sudo iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-# Allow DNS (needed for hostname resolution)
-sudo iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-sudo iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
-"
-
-    # Add default allowed hosts
+    # Resolve and add default allowed hosts
     if [[ "${allow_defaults}" == "true" ]]; then
         for entry in "${DEFAULT_ALLOWED_HOSTS[@]}"; do
             local host="${entry%%:*}"
             local port="${entry##*:}"
-            iptables_script+="
-# Default: ${host}
-for ip in \$(dig +short ${host} 2>/dev/null || echo ''); do
-    sudo iptables -A OUTPUT -p tcp -d \"\${ip}\" --dport ${port} -j ACCEPT
-done
-"
+            local ips
+            ips=$(_resolve_host "${host}")
+            while IFS= read -r ip; do
+                [[ -z "${ip}" ]] && continue
+                rules+=("sudo iptables -A OUTPUT -p tcp -d ${ip} --dport ${port} -j ACCEPT")
+            done <<< "${ips}"
         done
     fi
 
-    # Add custom allowed hosts from config
+    # Custom allowed hosts from config
     local custom_rules
     custom_rules=$(parse_network_rules "${config_file}")
     while IFS= read -r rule; do
         [[ -z "${rule}" ]] && continue
         local host="${rule%%:*}"
         local port="${rule##*:}"
-        iptables_script+="
-# Custom: ${host}:${port}
-for ip in \$(dig +short ${host} 2>/dev/null || echo ''); do
-    sudo iptables -A OUTPUT -p tcp -d \"\${ip}\" --dport ${port} -j ACCEPT
-done
-"
+        local ips
+        ips=$(_resolve_host "${host}")
+        while IFS= read -r ip; do
+            [[ -z "${ip}" ]] && continue
+            rules+=("sudo iptables -A OUTPUT -p tcp -d ${ip} --dport ${port} -j ACCEPT")
+        done <<< "${ips}"
     done <<< "${custom_rules}"
 
-    # Add host service forwarding
+    # Host service forwarding — resolve gateway inside VM
     local host_services
     host_services=$(parse_host_services "${config_file}")
+    local gateway=""
     while IFS= read -r port; do
         [[ -z "${port}" ]] && continue
-        # The VM gateway IP is typically the default gateway
-        iptables_script+="
-# Host service: port ${port}
-GATEWAY=\$(ip route | grep default | awk '{print \$3}')
-sudo iptables -A OUTPUT -p tcp -d \"\${GATEWAY}\" --dport ${port} -j ACCEPT
-"
+        if [[ -z "${gateway}" ]]; then
+            gateway=$(vm_exec "${vm_name}" "${runtime}" bash -c "ip route | grep default | head -1" 2>/dev/null | awk '{print $3}')
+        fi
+        if [[ -n "${gateway}" ]]; then
+            rules+=("sudo iptables -A OUTPUT -p tcp -d ${gateway} --dport ${port} -j ACCEPT")
+        fi
     done <<< "${host_services}"
 
-    # Default deny all other outbound
-    iptables_script+="
-# Default deny
-sudo iptables -A OUTPUT -p tcp -j DROP
-sudo iptables -A OUTPUT -p udp -j DROP
+    # Default deny
+    rules+=("sudo iptables -A OUTPUT -p tcp -j DROP")
+    rules+=("sudo iptables -A OUTPUT -p udp -j DROP")
 
-echo 'Network rules applied.'
-"
+    # Join all rules with semicolons and execute as one command
+    local joined
+    joined=$(printf '%s; ' "${rules[@]}")
+    joined+="echo 'Network rules applied.'"
 
-    # Apply inside VM
-    echo "${iptables_script}" | vm_exec "${vm_name}" "${runtime}" bash 2>/dev/null || {
+    vm_exec "${vm_name}" "${runtime}" bash -c "${joined}" 2>/dev/null || {
         log_warn "Could not apply network rules (iptables may not be available)"
     }
 }
