@@ -1,0 +1,41 @@
+# Default network allowlist for aibox
+# These are applied when network.allow_defaults: true
+
+allowed:
+  # Package registries
+  - host: registry.npmjs.org
+    port: 443
+    description: "npm packages"
+  - host: pypi.org
+    port: 443
+    description: "Python packages"
+  - host: files.pythonhosted.org
+    port: 443
+    description: "Python package files"
+
+  # Version control
+  - host: github.com
+    port: 443
+    description: "GitHub"
+  - host: api.github.com
+    port: 443
+    description: "GitHub API"
+
+  # AI services
+  - host: api.anthropic.com
+    port: 443
+    description: "Claude API"
+
+  # Language installers
+  - host: deb.nodesource.com
+    port: 443
+    description: "Node.js installer"
+  - host: go.dev
+    port: 443
+    description: "Go installer"
+  - host: sh.rustup.rs
+    port: 443
+    description: "Rust installer"
+  - host: static.rust-lang.org
+    port: 443
+    description: "Rust downloads"

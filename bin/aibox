@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# aibox — Run AI coding agents inside isolated VMs
+# General-purpose VM isolation for macOS Apple Silicon
+
+set -euo pipefail
+
+AIBOX_VERSION="0.1.0"
+AIBOX_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LIB_DIR="${AIBOX_DIR}/lib"
+
+# Source shared utilities
+# shellcheck source=../lib/common.sh
+source "${LIB_DIR}/common.sh"
+
+usage() {
+    cat <<EOF
+aibox v${AIBOX_VERSION} — VM isolation for AI coding agents
+
+Usage: aibox <command> [options]
+
+Commands:
+    init        Generate default aibox.yaml in current directory
+    setup       Create and provision a new VM
+    start       Start an existing VM
+    stop        Stop the running VM
+    teardown    Destroy the VM and free resources
+    status      Show VM status and configuration
+    exec        Execute a command inside the VM
+
+Options:
+    --help      Show this help message
+    --version   Show version
+
+Examples:
+    aibox init                          # Create config file
+    aibox setup                         # Create and provision VM
+    aibox start                         # Start the VM
+    aibox exec claude "fix the bug"     # Run AI agent in VM
+    aibox exec bash                     # Get a shell in VM
+    aibox stop                          # Stop the VM
+    aibox teardown                      # Destroy the VM
+
+Documentation: https://github.com/mikedomenech/aibox
+EOF
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 0
+    fi
+
+    local command="$1"
+    shift
+
+    case "${command}" in
+        init)
+            source "${LIB_DIR}/init.sh"
+            cmd_init "$@"
+            ;;
+        setup)
+            source "${LIB_DIR}/setup.sh"
+            cmd_setup "$@"
+            ;;
+        start)
+            source "${LIB_DIR}/start.sh"
+            cmd_start "$@"
+            ;;
+        stop)
+            source "${LIB_DIR}/stop.sh"
+            cmd_stop "$@"
+            ;;
+        teardown)
+            source "${LIB_DIR}/teardown.sh"
+            cmd_teardown "$@"
+            ;;
+        status)
+            source "${LIB_DIR}/status.sh"
+            cmd_status "$@"
+            ;;
+        exec)
+            source "${LIB_DIR}/exec.sh"
+            cmd_exec "$@"
+            ;;
+        --help|-h|help)
+            usage
+            exit 0
+            ;;
+        --version|-v)
+            echo "aibox v${AIBOX_VERSION}"
+            exit 0
+            ;;
+        *)
+            log_error "Unknown command: ${command}"
+            echo "Run 'aibox --help' for usage."
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
