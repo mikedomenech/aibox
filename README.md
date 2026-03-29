@@ -89,7 +89,7 @@ When `allow_defaults: true`, these hosts are reachable:
 |------|---------|
 | registry.npmjs.org | npm packages |
 | pypi.org, files.pythonhosted.org | Python packages |
-| github.com, api.github.com | Git + GitHub API |
+| github.com, api.github.com, *.githubusercontent.com | Git + GitHub API + content |
 | api.anthropic.com | Claude API |
 | deb.nodesource.com | Node.js install |
 | go.dev | Go install |
