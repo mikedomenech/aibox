@@ -133,15 +133,22 @@ _setup_orbstack() {
             sudo chown agent:agent /home/agent/.claude
         fi
 
-        # Hide the host filesystem by mounting an empty tmpfs over /mnt/mac
-        # The agent user cannot unmount this without root/sudo
-        sudo mount -t tmpfs -o size=1M,mode=000 tmpfs /mnt/mac
+        # Hide ALL host filesystem mounts — OrbStack exposes the host at
+        # /mnt/mac AND at native macOS paths (/Users, /Volumes, /Applications, etc.)
+        # The agent user cannot unmount these without root/sudo
+        for hostmount in /mnt/mac /Users /Volumes /Applications /Library /private; do
+            if mountpoint -q \"\${hostmount}\" 2>/dev/null || [ -d \"\${hostmount}\" ]; then
+                sudo mount -t tmpfs -o size=1M,mode=000 tmpfs \"\${hostmount}\"
+            fi
+        done
 
         # Persist mounts across VM restarts
         if ! grep -q '/workspace' /etc/fstab 2>/dev/null; then
             echo '/mnt/mac${project_path} /workspace none bind 0 0' | sudo tee -a /etc/fstab >/dev/null
             echo '/mnt/mac/Users/${USER}/.claude /home/agent/.claude none bind 0 0' | sudo tee -a /etc/fstab >/dev/null
-            echo 'tmpfs /mnt/mac tmpfs size=1M,mode=000 0 0' | sudo tee -a /etc/fstab >/dev/null
+            for hostmount in /mnt/mac /Users /Volumes /Applications /Library /private; do
+                echo \"tmpfs \${hostmount} tmpfs size=1M,mode=000 0 0\" | sudo tee -a /etc/fstab >/dev/null
+            done
         fi
 
         # Set up agent home directory
