@@ -107,6 +107,11 @@ cmd_start() {
     log_info "Applying network rules..."
     apply_network_rules "${vm_name}" "${runtime}" "${config_file}"
 
+    # Sync Claude Code OAuth credentials from macOS Keychain into ~/.claude
+    # On macOS, Claude Code stores OAuth tokens in the Keychain; on Linux (inside
+    # the VM), it reads from ~/.claude/.credentials.json instead.
+    _sync_claude_credentials
+
     # Pass environment variables
     _inject_env_vars "${vm_name}" "${runtime}" "${config_file}"
 
@@ -167,4 +172,23 @@ _inject_env_vars() {
     echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
         log_warn "Could not inject environment variables"
     }
+}
+
+_sync_claude_credentials() {
+    local creds_file="${HOME}/.claude/.credentials.json"
+    local keychain_service="Claude Code-credentials"
+    local keychain_account
+    keychain_account="$(whoami)"
+
+    # Extract OAuth credentials from macOS Keychain
+    local creds
+    creds=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null) || true
+
+    if [[ -n "${creds}" ]]; then
+        echo "${creds}" > "${creds_file}"
+        chmod 600 "${creds_file}"
+        log_step "Claude credentials synced from Keychain"
+    else
+        log_warn "No Claude Code credentials found in Keychain. Run 'claude login' on the host first."
+    fi
 }

@@ -89,61 +89,65 @@ _check_claude_auth() {
 
     local has_key=false
 
-    if [[ "${phase}" == "post" ]]; then
-        # Post-failure: check the actual VM environment instead of host-side config.
-        # Host-side files (.aibox-env, static env) may not reflect what's in the running VM
-        # (e.g., user added a key after the VM started).
-        local vm_key
-        vm_key=$(vm_exec "${vm_name}" "${runtime}" sudo -u agent bash -lc 'echo $ANTHROPIC_API_KEY' 2>/dev/null) || true
-        if [[ -n "${vm_key}" ]]; then
-            has_key=true
-        fi
-    else
-        # Pre-flight: check host-side config to predict whether the key will be available
+    # Check 1: OAuth credentials file (synced from macOS Keychain by aibox start)
+    local creds_file="${HOME}/.claude/.credentials.json"
+    if [[ -f "${creds_file}" ]] && [[ -s "${creds_file}" ]]; then
+        has_key=true
+    fi
 
-        # Check 1: ANTHROPIC_API_KEY in host environment (will be passed through)
-        local passthrough_vars
-        passthrough_vars=$(parse_env_passthrough "${config_file}")
-        if echo "${passthrough_vars}" | grep -qx "ANTHROPIC_API_KEY" && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-            has_key=true
-        fi
-
-        # Check 2: ANTHROPIC_API_KEY in .aibox-env file
-        if [[ "${has_key}" == "false" ]]; then
-            local env_file
-            env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
-            if [[ -f "${env_file}" ]] && grep -q "^ANTHROPIC_API_KEY=" "${env_file}" 2>/dev/null; then
+    if [[ "${has_key}" == "false" ]]; then
+        if [[ "${phase}" == "post" ]]; then
+            # Post-failure: check the actual VM environment
+            local vm_key
+            vm_key=$(vm_exec "${vm_name}" "${runtime}" sudo -u agent bash -lc 'echo $ANTHROPIC_API_KEY' 2>/dev/null) || true
+            if [[ -n "${vm_key}" ]]; then
                 has_key=true
             fi
-        fi
+        else
+            # Pre-flight: check host-side config
 
-        # Check 3: ANTHROPIC_API_KEY in static env vars
-        if [[ "${has_key}" == "false" ]]; then
-            local static_vars
-            static_vars=$(parse_env_static "${config_file}")
-            if echo "${static_vars}" | grep -q "^ANTHROPIC_API_KEY="; then
+            # Check 2: ANTHROPIC_API_KEY in host environment (will be passed through)
+            local passthrough_vars
+            passthrough_vars=$(parse_env_passthrough "${config_file}")
+            if echo "${passthrough_vars}" | grep -qx "ANTHROPIC_API_KEY" && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
                 has_key=true
+            fi
+
+            # Check 3: ANTHROPIC_API_KEY in .aibox-env file
+            if [[ "${has_key}" == "false" ]]; then
+                local env_file
+                env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
+                if [[ -f "${env_file}" ]] && grep -q "^ANTHROPIC_API_KEY=" "${env_file}" 2>/dev/null; then
+                    has_key=true
+                fi
+            fi
+
+            # Check 4: ANTHROPIC_API_KEY in static env vars
+            if [[ "${has_key}" == "false" ]]; then
+                local static_vars
+                static_vars=$(parse_env_static "${config_file}")
+                if echo "${static_vars}" | grep -q "^ANTHROPIC_API_KEY="; then
+                    has_key=true
+                fi
             fi
         fi
     fi
 
     if [[ "${has_key}" == "false" ]]; then
         if [[ "${phase}" == "pre" ]]; then
-            log_warn "No ANTHROPIC_API_KEY found. OAuth login will not work inside the VM"
+            log_warn "No Claude credentials found. OAuth login will not work inside the VM"
             log_warn "(the VM cannot open a browser or access the macOS Keychain)."
             echo ""
-            echo "  To fix, set your API key in one of these ways:"
+            echo "  To fix:"
             echo ""
-            echo "    1. Add to .aibox-env:  echo 'ANTHROPIC_API_KEY=sk-...' >> .aibox-env"
-            echo "    2. Export in shell:    export ANTHROPIC_API_KEY=sk-..."
-            echo "       (and ensure 'ANTHROPIC_API_KEY' is in aibox.yaml env.pass_through)"
+            echo "    1. Run 'claude login' on the host, then 'aibox start' (syncs OAuth)"
+            echo "    2. Or set ANTHROPIC_API_KEY in .aibox-env or your shell environment"
             echo ""
         else
             log_error "Claude Code failed — this may be an authentication issue."
-            log_error "OAuth login does not work inside the VM. Set ANTHROPIC_API_KEY instead."
             echo ""
-            echo "  Add to .aibox-env:  echo 'ANTHROPIC_API_KEY=sk-...' >> .aibox-env"
-            echo "  Then restart:       aibox start"
+            echo "  Run 'claude login' on the host, then 'aibox start' to sync credentials."
+            echo "  Or set ANTHROPIC_API_KEY in .aibox-env and restart."
             echo ""
         fi
     fi
