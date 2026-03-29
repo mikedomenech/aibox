@@ -13,6 +13,10 @@ else
     RED='' GREEN='' YELLOW='' BLUE='' BOLD='' NC=''
 fi
 
+# Host filesystem mount points to hide inside OrbStack VMs
+# OrbStack exposes the host at /mnt/mac AND at native macOS paths
+AIBOX_HOST_MOUNTS=(/mnt/mac /Users /Volumes /Applications /Library /private)
+
 log_info() {
     echo -e "${BLUE}▸${NC} $*"
 }

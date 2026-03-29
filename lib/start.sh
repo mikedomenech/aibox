@@ -78,6 +78,7 @@ cmd_start() {
     # Re-apply filesystem isolation (OrbStack may restore /mnt/mac on restart)
     if [[ "${runtime}" == "orbstack" ]]; then
         log_info "Applying filesystem isolation..."
+        local host_mounts="${AIBOX_HOST_MOUNTS[*]}"
         orb run -m "${vm_name}" bash -c "
             # Re-mount if not already mounted
             if ! mountpoint -q /workspace 2>/dev/null; then
@@ -91,7 +92,7 @@ cmd_start() {
                 fi
             fi
             # Re-hide ALL host filesystem mounts if visible
-            for hostmount in /mnt/mac /Users /Volumes /Applications /Library /private; do
+            for hostmount in ${host_mounts}; do
                 if mountpoint -q \"\${hostmount}\" 2>/dev/null; then
                     # Check if it's already our tmpfs blocker
                     if ! mount | grep -q \"tmpfs on \${hostmount} type tmpfs\"; then

@@ -114,6 +114,7 @@ _setup_orbstack() {
     # the project directory — no host filesystem access at all.
 
     log_step "Configuring filesystem isolation..."
+    local host_mounts="${AIBOX_HOST_MOUNTS[*]}"
     orb run -m "${vm_name}" bash -c "
         # Create the agent user — no sudo, no password, restricted shell
         sudo useradd -m -s /bin/bash -G video,staff agent 2>/dev/null || true
@@ -136,20 +137,19 @@ _setup_orbstack() {
         # Hide ALL host filesystem mounts — OrbStack exposes the host at
         # /mnt/mac AND at native macOS paths (/Users, /Volumes, /Applications, etc.)
         # The agent user cannot unmount these without root/sudo
-        for hostmount in /mnt/mac /Users /Volumes /Applications /Library /private; do
+        for hostmount in ${host_mounts}; do
             if mountpoint -q \"\${hostmount}\" 2>/dev/null || [ -d \"\${hostmount}\" ]; then
                 sudo mount -t tmpfs -o size=1M,mode=000 tmpfs \"\${hostmount}\"
             fi
         done
 
-        # Persist mounts across VM restarts
-        if ! grep -q '/workspace' /etc/fstab 2>/dev/null; then
-            echo '/mnt/mac${project_path} /workspace none bind 0 0' | sudo tee -a /etc/fstab >/dev/null
-            echo '/mnt/mac/Users/${USER}/.claude /home/agent/.claude none bind 0 0' | sudo tee -a /etc/fstab >/dev/null
-            for hostmount in /mnt/mac /Users /Volumes /Applications /Library /private; do
-                echo \"tmpfs \${hostmount} tmpfs size=1M,mode=000 0 0\" | sudo tee -a /etc/fstab >/dev/null
-            done
-        fi
+        # Persist mounts across VM restarts (idempotent — each entry checked individually)
+        _fstab_add() { grep -qF \"\$1\" /etc/fstab 2>/dev/null || echo \"\$1\" | sudo tee -a /etc/fstab >/dev/null; }
+        _fstab_add '/mnt/mac${project_path} /workspace none bind 0 0'
+        _fstab_add '/mnt/mac/Users/${USER}/.claude /home/agent/.claude none bind 0 0'
+        for hostmount in ${host_mounts}; do
+            _fstab_add \"tmpfs \${hostmount} tmpfs size=1M,mode=000 0 0\"
+        done
 
         # Set up agent home directory
         sudo mkdir -p /home/agent/.config
