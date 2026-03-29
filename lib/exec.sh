@@ -51,7 +51,7 @@ cmd_exec() {
     # Pre-flight: warn if running Claude Code without an API key
     # OAuth login won't work inside the VM (no browser, no macOS Keychain)
     if [[ "$1" == "claude" ]]; then
-        _check_claude_auth "${config_file}" "pre"
+        _check_claude_auth "${config_file}" "pre" "${vm_name}" "${runtime}"
     fi
 
     # Execute command inside VM as the unprivileged "agent" user
@@ -89,46 +89,61 @@ _check_claude_auth() {
 
     local has_key=false
 
-    # Check 1: OAuth credentials file (synced from macOS Keychain by aibox start)
-    local creds_file="${HOME}/.claude/.credentials.json"
-    if [[ -f "${creds_file}" ]] && [[ -s "${creds_file}" ]]; then
-        has_key=true
-    fi
+    if [[ "${phase}" == "post" ]]; then
+        # Post-failure: check what's actually available inside the VM
 
-    if [[ "${has_key}" == "false" ]]; then
-        if [[ "${phase}" == "post" ]]; then
-            # Post-failure: check the actual VM environment
+        # Check OAuth credentials file inside the VM (OrbStack only — Lima doesn't mount ~/.claude)
+        if [[ "${runtime}" == "orbstack" ]]; then
+            local vm_creds
+            vm_creds=$(vm_exec "${vm_name}" "${runtime}" sudo -u agent bash -c 'cat /home/agent/.claude/.credentials.json 2>/dev/null' 2>/dev/null) || true
+            if [[ -n "${vm_creds}" ]]; then
+                has_key=true
+            fi
+        fi
+
+        # Check ANTHROPIC_API_KEY in the VM environment
+        if [[ "${has_key}" == "false" ]]; then
             local vm_key
             vm_key=$(vm_exec "${vm_name}" "${runtime}" sudo -u agent bash -lc 'echo $ANTHROPIC_API_KEY' 2>/dev/null) || true
             if [[ -n "${vm_key}" ]]; then
                 has_key=true
             fi
-        else
-            # Pre-flight: check host-side config
+        fi
+    else
+        # Pre-flight: check host-side config to predict availability
 
-            # Check 2: ANTHROPIC_API_KEY in host environment (will be passed through)
+        # Check 1: OAuth credentials file (only useful for OrbStack which mounts ~/.claude)
+        if [[ "${runtime}" == "orbstack" ]]; then
+            local creds_file="${HOME}/.claude/.credentials.json"
+            if [[ -f "${creds_file}" ]] && [[ -s "${creds_file}" ]]; then
+                has_key=true
+            fi
+        fi
+
+        # Check 2: ANTHROPIC_API_KEY in host environment (will be passed through)
+        if [[ "${has_key}" == "false" ]]; then
             local passthrough_vars
             passthrough_vars=$(parse_env_passthrough "${config_file}")
             if echo "${passthrough_vars}" | grep -qx "ANTHROPIC_API_KEY" && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
                 has_key=true
             fi
+        fi
 
-            # Check 3: ANTHROPIC_API_KEY in .aibox-env file
-            if [[ "${has_key}" == "false" ]]; then
-                local env_file
-                env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
-                if [[ -f "${env_file}" ]] && grep -q "^ANTHROPIC_API_KEY=" "${env_file}" 2>/dev/null; then
-                    has_key=true
-                fi
+        # Check 3: ANTHROPIC_API_KEY in .aibox-env file
+        if [[ "${has_key}" == "false" ]]; then
+            local env_file
+            env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
+            if [[ -f "${env_file}" ]] && grep -q "^ANTHROPIC_API_KEY=" "${env_file}" 2>/dev/null; then
+                has_key=true
             fi
+        fi
 
-            # Check 4: ANTHROPIC_API_KEY in static env vars
-            if [[ "${has_key}" == "false" ]]; then
-                local static_vars
-                static_vars=$(parse_env_static "${config_file}")
-                if echo "${static_vars}" | grep -q "^ANTHROPIC_API_KEY="; then
-                    has_key=true
-                fi
+        # Check 4: ANTHROPIC_API_KEY in static env vars
+        if [[ "${has_key}" == "false" ]]; then
+            local static_vars
+            static_vars=$(parse_env_static "${config_file}")
+            if echo "${static_vars}" | grep -q "^ANTHROPIC_API_KEY="; then
+                has_key=true
             fi
         fi
     fi

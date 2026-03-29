@@ -23,7 +23,7 @@ aibox start         # starts VM and syncs credentials
 aibox exec claude   # run Claude Code inside the VM
 ```
 
-`aibox start` automatically syncs your OAuth credentials from the macOS Keychain into the VM so Claude Code works without any API key setup.
+`aibox start` automatically syncs your OAuth credentials from the macOS Keychain into the VM (OrbStack only) so Claude Code works without any API key setup.
 
 ## How It Works
 
@@ -140,13 +140,15 @@ One of:
 
 ## Authentication
 
-Claude Code inside the VM can't open a browser or access the macOS Keychain, so OAuth login doesn't work directly. aibox handles this automatically:
+Claude Code inside the VM can't open a browser or access the macOS Keychain, so OAuth login doesn't work directly.
+
+**OrbStack (recommended):** aibox handles this automatically:
 
 1. Run `claude login` on the host (one-time)
 2. `aibox start` extracts the OAuth token from the macOS Keychain and writes it to `~/.claude/.credentials.json`
 3. Since `~/.claude` is bind-mounted into the VM, Claude Code picks up the credentials
 
-If you prefer API keys, you can also set `ANTHROPIC_API_KEY` via environment pass-through or `.aibox-env`.
+**Lima:** OAuth sync is not supported. Set `ANTHROPIC_API_KEY` via environment pass-through or `.aibox-env`.
 
 ## Security Model
 

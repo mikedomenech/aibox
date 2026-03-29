@@ -110,7 +110,10 @@ cmd_start() {
     # Sync Claude Code OAuth credentials from macOS Keychain into ~/.claude
     # On macOS, Claude Code stores OAuth tokens in the Keychain; on Linux (inside
     # the VM), it reads from ~/.claude/.credentials.json instead.
-    _sync_claude_credentials
+    # Only works with OrbStack (which bind-mounts ~/.claude into the VM).
+    if [[ "${runtime}" == "orbstack" ]]; then
+        _sync_claude_credentials
+    fi
 
     # Pass environment variables
     _inject_env_vars "${vm_name}" "${runtime}" "${config_file}"
@@ -175,7 +178,8 @@ _inject_env_vars() {
 }
 
 _sync_claude_credentials() {
-    local creds_file="${HOME}/.claude/.credentials.json"
+    local claude_dir="${HOME}/.claude"
+    local creds_file="${claude_dir}/.credentials.json"
     local keychain_service="Claude Code-credentials"
     local keychain_account
     keychain_account="$(whoami)"
@@ -185,9 +189,12 @@ _sync_claude_credentials() {
     creds=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null) || true
 
     if [[ -n "${creds}" ]]; then
-        echo "${creds}" > "${creds_file}"
-        chmod 600 "${creds_file}"
-        log_step "Claude credentials synced from Keychain"
+        mkdir -p "${claude_dir}"
+        if printf '%s' "${creds}" > "${creds_file}" && chmod 600 "${creds_file}"; then
+            log_step "Claude credentials synced from Keychain"
+        else
+            log_warn "Failed to write Claude credentials to ${creds_file}"
+        fi
     else
         log_warn "No Claude Code credentials found in Keychain. Run 'claude login' on the host first."
     fi
