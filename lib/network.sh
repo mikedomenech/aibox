@@ -13,6 +13,8 @@ DEFAULT_ALLOWED_HOSTS=(
     "github.com:22"
     "api.github.com:443"
     "cli.github.com:443"
+    "raw.githubusercontent.com:443"
+    "objects.githubusercontent.com:443"
     "api.anthropic.com:443"
     "deb.nodesource.com:443"
     "go.dev:443"
