@@ -71,7 +71,9 @@ EOF
     echo ""
     log_info "Next steps:"
     log_step "1. Edit ${config_file} to configure your VM"
-    log_step "2. cp ${env_example} .aibox-env && edit .aibox-env"
+    log_step "2. Authenticate (pick one):"
+    log_step "   a. claude login  (OAuth — syncs automatically with OrbStack)"
+    log_step "   b. cp ${env_example} .aibox-env && add your API key"
     log_step "3. aibox setup"
 }
 

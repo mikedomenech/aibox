@@ -107,6 +107,14 @@ cmd_start() {
     log_info "Applying network rules..."
     apply_network_rules "${vm_name}" "${runtime}" "${config_file}"
 
+    # Sync Claude Code OAuth credentials from macOS Keychain into ~/.claude
+    # On macOS, Claude Code stores OAuth tokens in the Keychain; on Linux (inside
+    # the VM), it reads from ~/.claude/.credentials.json instead.
+    # Only works with OrbStack (which bind-mounts ~/.claude into the VM).
+    if [[ "${runtime}" == "orbstack" ]]; then
+        _sync_claude_credentials
+    fi
+
     # Pass environment variables
     _inject_env_vars "${vm_name}" "${runtime}" "${config_file}"
 
@@ -167,4 +175,27 @@ _inject_env_vars() {
     echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
         log_warn "Could not inject environment variables"
     }
+}
+
+_sync_claude_credentials() {
+    local claude_dir="${HOME}/.claude"
+    local creds_file="${claude_dir}/.credentials.json"
+    local keychain_service="Claude Code-credentials"
+    local keychain_account
+    keychain_account="$(whoami)"
+
+    # Extract OAuth credentials from macOS Keychain
+    local creds
+    creds=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null) || true
+
+    if [[ -n "${creds}" ]]; then
+        mkdir -p "${claude_dir}"
+        if printf '%s' "${creds}" > "${creds_file}" && chmod 600 "${creds_file}"; then
+            log_step "Claude credentials synced from Keychain"
+        else
+            log_warn "Failed to write Claude credentials to ${creds_file}"
+        fi
+    else
+        log_warn "No Claude Code credentials found in Keychain. Run 'claude login' on the host first."
+    fi
 }

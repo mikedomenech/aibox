@@ -13,11 +13,17 @@ AI coding agents need broad system access to be useful — shell, filesystem, ne
 git clone https://github.com/mikedomenech/aibox.git
 cd aibox && ./install.sh
 
+# Authenticate (one-time, on the host)
+claude login
+
 # In your project directory
 aibox init          # creates aibox.yaml
 aibox setup         # creates and provisions the VM
+aibox start         # starts VM and syncs credentials
 aibox exec claude   # run Claude Code inside the VM
 ```
+
+`aibox start` automatically syncs your OAuth credentials from the macOS Keychain into the VM (OrbStack only) so Claude Code works without any API key setup.
 
 ## How It Works
 
@@ -55,14 +61,14 @@ resources:
   disk: 20
 
 network:
-  allow_defaults: true    # npm, pypi, github, anthropic API
+  allow_defaults: true    # npm, pypi, github, anthropic API, etc.
   # allow:
   #   - host: "my-api.company.com"
   #     port: 443
 
 env:
   pass_through:
-    - ANTHROPIC_API_KEY
+    - ANTHROPIC_API_KEY   # optional — OAuth is synced automatically
   static:
     TERM: "xterm-256color"
 
@@ -131,6 +137,18 @@ aibox stop && aibox teardown       # clean up
 One of:
 - [OrbStack](https://orbstack.dev/) (recommended) — `brew install orbstack`
 - [Lima](https://lima-vm.io/) — `brew install lima`
+
+## Authentication
+
+Claude Code inside the VM can't open a browser or access the macOS Keychain, so OAuth login doesn't work directly.
+
+**OrbStack (recommended):** aibox handles this automatically:
+
+1. Run `claude login` on the host (one-time)
+2. `aibox start` extracts the OAuth token from the macOS Keychain and writes it to `~/.claude/.credentials.json`
+3. Since `~/.claude` is bind-mounted into the VM, Claude Code picks up the credentials
+
+**Lima:** OAuth sync is not supported. Set `ANTHROPIC_API_KEY` via environment pass-through or `.aibox-env`.
 
 ## Security Model
 
