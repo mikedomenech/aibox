@@ -1,7 +1,0 @@
-# aibox environment variables
-# Copy to .aibox-env and fill in your values
-# IMPORTANT: .aibox-env should be gitignored
-
-ANTHROPIC_API_KEY=your-api-key-here
-# OPENAI_API_KEY=your-key-here
-# DATABASE_URL=postgres://...
