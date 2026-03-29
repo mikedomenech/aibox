@@ -51,7 +51,7 @@ cmd_exec() {
     # Pre-flight: warn if running Claude Code without an API key
     # OAuth login won't work inside the VM (no browser, no macOS Keychain)
     if [[ "$1" == "claude" ]]; then
-        _check_claude_auth "${config_file}"
+        _check_claude_auth "${config_file}" "pre"
     fi
 
     # Execute command inside VM as the unprivileged "agent" user
@@ -69,7 +69,7 @@ cmd_exec() {
     # If command failed, check if the VM crashed vs the command itself failing
     # If Claude Code exited, check if it was an auth failure
     if [[ "${exit_code}" -ne 0 && "${1:-}" == "claude" ]]; then
-        _check_claude_auth "${config_file}" "post"
+        _check_claude_auth "${config_file}" "post" "${vm_name}" "${runtime}"
     fi
     if [[ "${exit_code}" -ne 0 ]]; then
         if ! vm_is_running "${vm_name}" "${runtime}"; then
@@ -84,31 +84,46 @@ cmd_exec() {
 _check_claude_auth() {
     local config_file="$1"
     local phase="${2:-pre}"  # "pre" (before exec) or "post" (after failure)
+    local vm_name="${3:-}"
+    local runtime="${4:-}"
 
     local has_key=false
 
-    # Check 1: ANTHROPIC_API_KEY in host environment (will be passed through)
-    local passthrough_vars
-    passthrough_vars=$(parse_env_passthrough "${config_file}")
-    if echo "${passthrough_vars}" | grep -qx "ANTHROPIC_API_KEY" && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-        has_key=true
-    fi
-
-    # Check 2: ANTHROPIC_API_KEY in .aibox-env file
-    if [[ "${has_key}" == "false" ]]; then
-        local env_file
-        env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
-        if [[ -f "${env_file}" ]] && grep -q "^ANTHROPIC_API_KEY=" "${env_file}" 2>/dev/null; then
+    if [[ "${phase}" == "post" ]]; then
+        # Post-failure: check the actual VM environment instead of host-side config.
+        # Host-side files (.aibox-env, static env) may not reflect what's in the running VM
+        # (e.g., user added a key after the VM started).
+        local vm_key
+        vm_key=$(vm_exec "${vm_name}" "${runtime}" sudo -u agent bash -lc 'echo $ANTHROPIC_API_KEY' 2>/dev/null) || true
+        if [[ -n "${vm_key}" ]]; then
             has_key=true
         fi
-    fi
+    else
+        # Pre-flight: check host-side config to predict whether the key will be available
 
-    # Check 3: ANTHROPIC_API_KEY in static env vars
-    if [[ "${has_key}" == "false" ]]; then
-        local static_vars
-        static_vars=$(parse_env_static "${config_file}")
-        if echo "${static_vars}" | grep -q "^ANTHROPIC_API_KEY="; then
+        # Check 1: ANTHROPIC_API_KEY in host environment (will be passed through)
+        local passthrough_vars
+        passthrough_vars=$(parse_env_passthrough "${config_file}")
+        if echo "${passthrough_vars}" | grep -qx "ANTHROPIC_API_KEY" && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
             has_key=true
+        fi
+
+        # Check 2: ANTHROPIC_API_KEY in .aibox-env file
+        if [[ "${has_key}" == "false" ]]; then
+            local env_file
+            env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
+            if [[ -f "${env_file}" ]] && grep -q "^ANTHROPIC_API_KEY=" "${env_file}" 2>/dev/null; then
+                has_key=true
+            fi
+        fi
+
+        # Check 3: ANTHROPIC_API_KEY in static env vars
+        if [[ "${has_key}" == "false" ]]; then
+            local static_vars
+            static_vars=$(parse_env_static "${config_file}")
+            if echo "${static_vars}" | grep -q "^ANTHROPIC_API_KEY="; then
+                has_key=true
+            fi
         fi
     fi
 
