@@ -44,10 +44,15 @@ cmd_start() {
         exit 1
     fi
 
-    # Check if already running
+    # If already running, just re-sync credentials and env vars
     if vm_is_running "${vm_name}" "${runtime}"; then
-        log_warn "VM '${vm_name}' is already running."
-        exit 2
+        log_info "VM '${vm_name}' is already running. Syncing credentials..."
+        if [[ "${runtime}" == "orbstack" ]]; then
+            _sync_claude_credentials
+        fi
+        _inject_env_vars "${vm_name}" "${runtime}" "${config_file}"
+        log_success "Credentials synced."
+        return 0
     fi
 
     log_info "Starting VM '${vm_name}'..."

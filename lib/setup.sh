@@ -3,6 +3,8 @@
 
 # shellcheck source=config.sh
 source "${LIB_DIR}/config.sh"
+# shellcheck source=start.sh
+source "${LIB_DIR}/start.sh"
 
 cmd_setup() {
     local config_file="aibox.yaml"
@@ -78,6 +80,18 @@ cmd_setup() {
     # Run provisioning
     log_info "Provisioning VM..."
     _provision_vm "${vm_name}" "${runtime}" "${config_file}"
+
+    # Apply network rules
+    log_info "Applying network rules..."
+    apply_network_rules "${vm_name}" "${runtime}" "${config_file}"
+
+    # Sync Claude OAuth credentials (OrbStack only)
+    if [[ "${runtime}" == "orbstack" ]]; then
+        _sync_claude_credentials
+    fi
+
+    # Pass environment variables
+    _inject_env_vars "${vm_name}" "${runtime}" "${config_file}"
 
     local end_time elapsed
     end_time=$(date +%s)
