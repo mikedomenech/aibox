@@ -48,7 +48,7 @@ cmd_start() {
     if vm_is_running "${vm_name}" "${runtime}"; then
         log_info "VM '${vm_name}' is already running. Syncing credentials..."
         if [[ "${runtime}" == "orbstack" ]]; then
-            _sync_claude_credentials
+            _sync_claude_credentials "${vm_name}" "${runtime}"
         fi
         _inject_env_vars "${vm_name}" "${runtime}" "${config_file}"
         log_success "Credentials synced."
@@ -183,6 +183,9 @@ _inject_env_vars() {
 }
 
 _sync_claude_credentials() {
+    local vm_name="$1"
+    local runtime="$2"
+
     local claude_dir="${HOME}/.claude"
     local creds_file="${claude_dir}/.credentials.json"
     local keychain_service="Claude Code-credentials"
@@ -195,12 +198,30 @@ _sync_claude_credentials() {
 
     if [[ -n "${creds}" ]]; then
         mkdir -p "${claude_dir}"
-        if printf '%s' "${creds}" > "${creds_file}" && chmod 600 "${creds_file}"; then
+        if printf '%s' "${creds}" > "${creds_file}" && chmod 644 "${creds_file}"; then
             log_step "Claude credentials synced from Keychain"
         else
             log_warn "Failed to write Claude credentials to ${creds_file}"
         fi
     else
         log_warn "No Claude Code credentials found in Keychain. Run 'claude login' on the host first."
+    fi
+
+    # Copy ~/.claude.json into the VM so Claude Code skips onboarding.
+    # This file lives outside ~/.claude/ so the bind mount doesn't cover it.
+    local state_file="${HOME}/.claude.json"
+    if [[ -f "${state_file}" ]]; then
+        case "${runtime}" in
+            orbstack)
+                cat "${state_file}" | orb run -m "${vm_name}" sudo bash -c \
+                    "cat > /home/agent/.claude.json && chmod 644 /home/agent/.claude.json && chown agent:agent /home/agent/.claude.json" \
+                    2>/dev/null || true
+                ;;
+            lima)
+                cat "${state_file}" | limactl shell "${vm_name}" -- sudo bash -c \
+                    "cat > /home/agent/.claude.json && chmod 644 /home/agent/.claude.json && chown agent:agent /home/agent/.claude.json" \
+                    2>/dev/null || true
+                ;;
+        esac
     fi
 }

@@ -87,7 +87,7 @@ cmd_setup() {
 
     # Sync Claude OAuth credentials (OrbStack only)
     if [[ "${runtime}" == "orbstack" ]]; then
-        _sync_claude_credentials
+        _sync_claude_credentials "${vm_name}" "${runtime}"
     fi
 
     # Pass environment variables
