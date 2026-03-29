@@ -16,7 +16,8 @@ resources:
 
 # Network rules — default-deny, allowlist only
 network:
-  # Built-in defaults: npm, pypi, github, anthropic API, DNS
+  # Built-in defaults: common dev/package hosts (npm, PyPI, GitHub, Anthropic API,
+  # NodeSource, go.dev, Rust tooling, etc.). DNS is always allowed.
   allow_defaults: true
 
   # Additional allowed destinations
