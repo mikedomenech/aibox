@@ -1,0 +1,64 @@
+# aibox — VM Isolation Configuration
+# Place this file in your project root
+# Docs: https://github.com/mikedomenech/aibox
+
+# VM runtime (auto-detects if omitted)
+# runtime: orbstack  # orbstack | lima
+
+# Project directory to mount into the VM (default: current directory)
+# project_path: .
+
+# Resource limits
+resources:
+  cpu: 4          # CPU cores (1-8)
+  memory: 4096    # Memory in MB (512-16384)
+  disk: 20        # Disk in GB (5-100)
+
+# Network rules — default-deny, allowlist only
+network:
+  # Built-in defaults: npm, pypi, github, anthropic API, DNS
+  allow_defaults: true
+
+  # Additional allowed destinations
+  # allow:
+  #   - host: "my-api.company.com"
+  #     port: 443
+  #     description: "Internal API"
+
+  # Host services the agent can access (mapped through VM gateway)
+  # host_services:
+  #   - port: 5432
+  #     description: "PostgreSQL"
+  #   - port: 3000
+  #     description: "Dev server"
+
+# Environment variables
+env:
+  # Pass from host environment into VM
+  pass_through:
+    - ANTHROPIC_API_KEY
+
+  # Static values
+  static:
+    TERM: "xterm-256color"
+    LANG: "en_US.UTF-8"
+
+# Alternative: load env vars from file (gitignored)
+# env_file: .aibox-env
+
+# Tools to provision in the VM
+provision:
+  languages:
+    node: "22"
+    # python: "3.12"
+    # go: "1.22"
+    # rust: "stable"
+
+  agents:
+    - claude
+    # - cursor
+    # - aider
+
+  # extra_packages:
+  #   - ripgrep
+  #   - docker.io
