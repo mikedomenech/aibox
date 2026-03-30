@@ -207,6 +207,22 @@ _sync_claude_credentials() {
         log_warn "No Claude Code credentials found in Keychain. Run 'claude login' on the host first."
     fi
 
+    # Fix plugin paths: installed_plugins.json contains host absolute paths
+    # (e.g. /Users/mike/.claude/...) but the VM bind-mounts to /home/agent/.claude.
+    # Create a symlink on the tmpfs so host paths resolve inside the VM.
+    # Directories are execute-only (111) so paths can be traversed but not listed.
+    case "${runtime}" in
+        orbstack)
+            orb run -m "${vm_name}" sudo bash -c "
+                chmod 755 /Users 2>/dev/null
+                mkdir -p '/Users/${USER}'
+                ln -sfn /home/agent/.claude '/Users/${USER}/.claude'
+                chmod 111 '/Users/${USER}'
+                chmod 111 /Users
+            " 2>/dev/null || true
+            ;;
+    esac
+
     # Copy ~/.claude.json into the VM so Claude Code skips onboarding.
     # This file lives outside ~/.claude/ so the bind mount doesn't cover it.
     local state_file="${HOME}/.claude.json"
