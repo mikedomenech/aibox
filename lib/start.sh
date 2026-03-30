@@ -225,16 +225,19 @@ _sync_claude_credentials() {
 
     # Copy ~/.claude.json into the VM so Claude Code skips onboarding.
     # This file lives outside ~/.claude/ so the bind mount doesn't cover it.
+    # Patch installMethod to "npm" since Claude Code is installed via npm in the VM.
     local state_file="${HOME}/.claude.json"
     if [[ -f "${state_file}" ]]; then
+        local patched
+        patched=$(sed 's/"installMethod": *"[^"]*"/"installMethod": "npm"/' "${state_file}")
         case "${runtime}" in
             orbstack)
-                cat "${state_file}" | orb run -m "${vm_name}" sudo bash -c \
+                printf '%s' "${patched}" | orb run -m "${vm_name}" sudo bash -c \
                     "cat > /home/agent/.claude.json && chmod 644 /home/agent/.claude.json && chown agent:agent /home/agent/.claude.json" \
                     2>/dev/null || true
                 ;;
             lima)
-                cat "${state_file}" | limactl shell "${vm_name}" -- sudo bash -c \
+                printf '%s' "${patched}" | limactl shell "${vm_name}" -- sudo bash -c \
                     "cat > /home/agent/.claude.json && chmod 644 /home/agent/.claude.json && chown agent:agent /home/agent/.claude.json" \
                     2>/dev/null || true
                 ;;
