@@ -305,6 +305,26 @@ echo '>>> Agent \"${agent}\" — manual installation required'
         esac
     done <<< "${agents}"
 
+    # Add CLI tools
+    local tools
+    tools=$(parse_config_list "${config_file}" "provision" "tools")
+    while IFS= read -r tool; do
+        [[ -z "${tool}" ]] && continue
+        case "${tool}" in
+            railway)
+                provision_script+="
+echo '>>> Installing Railway CLI...'
+curl -fsSL https://railway.com/install.sh | sh
+"
+                ;;
+            *)
+                provision_script+="
+echo '>>> Tool \"${tool}\" — manual installation required'
+"
+                ;;
+        esac
+    done <<< "${tools}"
+
     # Add extra packages
     local extra_pkgs
     extra_pkgs=$(parse_config_list "${config_file}" "provision" "extra_packages")
