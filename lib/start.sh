@@ -177,21 +177,9 @@ _inject_env_vars() {
     fi
 
     # Write to /etc/profile.d for login shells
+    # Non-login shells get env vars via ORBENV in exec.sh
     echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" sudo bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
         log_warn "Could not inject environment variables to /etc/profile.d"
-    }
-
-    # Write KEY=VALUE pairs (without export) to /etc/environment for non-login shells
-    # orb run -u agent doesn't source /etc/profile.d/, but PAM reads /etc/environment
-    local etc_env=""
-    while IFS= read -r line; do
-        # Strip "export " prefix and shell script lines
-        [[ -z "${line}" || "${line}" == \#* || "${line}" == "#!/"* ]] && continue
-        etc_env+="${line#export }
-"
-    done <<< "${env_script}"
-    echo "${etc_env}" | vm_exec "${vm_name}" "${runtime}" sudo bash -c "cat > /etc/environment" 2>/dev/null || {
-        log_warn "Could not inject environment variables to /etc/environment"
     }
 }
 

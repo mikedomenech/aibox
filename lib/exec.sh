@@ -65,8 +65,22 @@ cmd_exec() {
     if [[ -f "${env_file}" ]]; then
         while IFS= read -r line || [[ -n "${line}" ]]; do
             [[ -z "${line}" || "${line}" == \#* ]] && continue
+
+            # Validate KEY=VALUE format
+            if [[ "${line}" != *=* ]]; then
+                log_warn "Skipping invalid line in ${env_file}: expected KEY=VALUE"
+                continue
+            fi
+
             local key="${line%%=*}"
             local val="${line#*=}"
+
+            # Validate key is a valid env var name
+            if [[ -z "${key}" || ! "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                log_warn "Skipping invalid variable name in ${env_file}: '${key}'"
+                continue
+            fi
+
             export "${key}=${val}"
             orbenv_names+="${orbenv_names:+:}${key}"
         done < "${env_file}"
