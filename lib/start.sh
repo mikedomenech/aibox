@@ -176,9 +176,22 @@ _inject_env_vars() {
         done <<< "${env_file_vars}"
     fi
 
-    # Write env file inside VM
-    echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
-        log_warn "Could not inject environment variables"
+    # Write to /etc/profile.d for login shells
+    echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" sudo bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
+        log_warn "Could not inject environment variables to /etc/profile.d"
+    }
+
+    # Write KEY=VALUE pairs (without export) to /etc/environment for non-login shells
+    # orb run -u agent doesn't source /etc/profile.d/, but PAM reads /etc/environment
+    local etc_env=""
+    while IFS= read -r line; do
+        # Strip "export " prefix and shell script lines
+        [[ -z "${line}" || "${line}" == \#* || "${line}" == "#!/"* ]] && continue
+        etc_env+="${line#export }
+"
+    done <<< "${env_script}"
+    echo "${etc_env}" | vm_exec "${vm_name}" "${runtime}" sudo bash -c "cat > /etc/environment" 2>/dev/null || {
+        log_warn "Could not inject environment variables to /etc/environment"
     }
 }
 
