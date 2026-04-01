@@ -176,9 +176,10 @@ _inject_env_vars() {
         done <<< "${env_file_vars}"
     fi
 
-    # Write env file inside VM
-    echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
-        log_warn "Could not inject environment variables"
+    # Write to /etc/profile.d for login shells
+    # Non-login shells get env vars via ORBENV in exec.sh
+    echo "${env_script}" | vm_exec "${vm_name}" "${runtime}" sudo bash -c "cat > /etc/profile.d/aibox-env.sh && chmod 644 /etc/profile.d/aibox-env.sh" 2>/dev/null || {
+        log_warn "Could not inject environment variables to /etc/profile.d"
     }
 }
 

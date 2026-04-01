@@ -206,7 +206,7 @@ load_env_file() {
         return
     fi
 
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "${line}" ]]; do
         # Skip comments and empty lines
         [[ -z "${line}" || "${line}" == \#* ]] && continue
         echo "${line}"

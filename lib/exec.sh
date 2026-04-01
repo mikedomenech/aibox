@@ -56,10 +56,50 @@ cmd_exec() {
 
     # Execute command inside VM as the unprivileged "agent" user
     # The agent user has no sudo access — cannot unmount /mnt/mac or escalate privileges
+    #
+    # Load env vars from .aibox-env and export them so orb run passes them via ORBENV
+    # (orb run doesn't source /etc/profile.d/ for non-login shells)
+    local env_file
+    env_file=$(parse_config "${config_file}" "env_file" ".aibox-env")
+    local orbenv_names=""
+    if [[ -f "${env_file}" ]]; then
+        while IFS= read -r line || [[ -n "${line}" ]]; do
+            [[ -z "${line}" || "${line}" == \#* ]] && continue
+
+            # Validate KEY=VALUE format
+            if [[ "${line}" != *=* ]]; then
+                log_warn "Skipping invalid line in ${env_file}: expected KEY=VALUE"
+                continue
+            fi
+
+            local key="${line%%=*}"
+            local val="${line#*=}"
+
+            # Validate key is a valid env var name
+            if [[ -z "${key}" || ! "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                log_warn "Skipping invalid variable name in ${env_file}: '${key}'"
+                continue
+            fi
+
+            export "${key}=${val}"
+            orbenv_names+="${orbenv_names:+:}${key}"
+        done < "${env_file}"
+    fi
+
+    # Also include pass-through vars
+    local passthrough_vars
+    passthrough_vars=$(parse_env_passthrough "${config_file}")
+    while IFS= read -r var_name; do
+        [[ -z "${var_name}" ]] && continue
+        if [[ -n "${!var_name:-}" ]]; then
+            orbenv_names+="${orbenv_names:+:}${var_name}"
+        fi
+    done <<< "${passthrough_vars}"
+
     local exit_code=0
     case "${runtime}" in
         orbstack)
-            orb run -m "${vm_name}" -u agent -w /workspace "$@" || exit_code=$?
+            ORBENV="${orbenv_names}" orb run -m "${vm_name}" -u agent -w /workspace "$@" || exit_code=$?
             ;;
         lima)
             limactl shell --workdir /workspace "${vm_name}" -- sudo -u agent "$@" || exit_code=$?
