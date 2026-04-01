@@ -16,6 +16,7 @@ DEFAULT_ALLOWED_HOSTS=(
     "raw.githubusercontent.com:443"
     "objects.githubusercontent.com:443"
     "api.anthropic.com:443"
+    "railway.com:443"
     "deb.nodesource.com:443"
     "go.dev:443"
     "sh.rustup.rs:443"

@@ -60,6 +60,10 @@ provision:
     # - cursor
     # - aider
 
+  # CLI tools
+  # tools:
+  #   - railway
+
   # extra_packages:
   #   - ripgrep
   #   - docker.io
